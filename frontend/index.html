@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Customer Segmentation Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f1a;
+      --surface:   rgba(255,255,255,0.04);
+      --border:    rgba(255,255,255,0.10);
+      --accent:    #6c63ff;
+      --accent2:   #48cfad;
+      --danger:    #fc5c7d;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --radius:    16px;
+      --shadow:    0 8px 32px rgba(0,0,0,0.45);
+    }
+
+    html { font-family: 'Inter', sans-serif; scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; padding: 24px 16px 60px; }
+
+    /* ── Gradient background animation ───────────────────────── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: -1;
+      background: radial-gradient(ellipse 80% 60% at 20% 10%, #6c63ff22 0%, transparent 60%),
+                  radial-gradient(ellipse 60% 50% at 80% 85%, #48cfad18 0%, transparent 60%),
+                  radial-gradient(ellipse 50% 40% at 60% 40%, #fc5c7d12 0%, transparent 60%);
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .wrapper { max-width: 1200px; margin: 0 auto; }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      text-align: center; padding: 40px 0 32px;
+      border-bottom: 1px solid var(--border); margin-bottom: 36px;
+    }
+    .badge {
+      display: inline-block; background: var(--accent); color: #fff;
+      font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+      padding: 4px 14px; border-radius: 99px; margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: clamp(26px,5vw,44px); font-weight: 800;
+      background: linear-gradient(135deg, #a78bfa, #6c63ff, #48cfad);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; line-height: 1.15; margin-bottom: 10px;
+    }
+    header p { color: var(--muted); font-size: 15px; max-width: 540px; margin: 0 auto; }
+
+    /* ── Grid ─────────────────────────────────────────────────── */
+    .grid { display: grid; grid-template-columns: 360px 1fr; gap: 24px; align-items: start; }
+    @media(max-width:900px) { .grid { grid-template-columns: 1fr; } }
+
+    /* ── Card ─────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--muted); margin-bottom: 20px;
+    }
+
+    /* ── Form ─────────────────────────────────────────────────── */
+    .field { margin-bottom: 22px; }
+    .field label {
+      display: flex; justify-content: space-between;
+      font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 10px;
+    }
+    .field label span { color: var(--muted); font-weight: 400; }
+
+    input[type="range"] {
+      -webkit-appearance: none; width: 100%; height: 6px;
+      border-radius: 99px; background: rgba(255,255,255,0.1); outline: none; cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px;
+      border-radius: 50%; background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(108,99,255,0.25); cursor: pointer;
+      transition: box-shadow 0.2s;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 0 8px rgba(108,99,255,0.3);
+    }
+
+    .range-ticks { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+    .btn-predict {
+      width: 100%; padding: 15px; border: none; border-radius: 12px; cursor: pointer;
+      background: linear-gradient(135deg, #6c63ff, #48cfad);
+      color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.5px;
+      transition: transform 0.18s, box-shadow 0.18s, opacity 0.18s;
+      box-shadow: 0 4px 20px rgba(108,99,255,0.35);
+    }
+    .btn-predict:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(108,99,255,0.5); }
+    .btn-predict:active:not(:disabled) { transform: translateY(0); }
+    .btn-predict:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* ── Loader ───────────────────────────────────────────────── */
+    .loader {
+      display: none; align-items: center; justify-content: center;
+      gap: 8px; margin-top: 16px; color: var(--muted); font-size: 13px;
+    }
+    .loader.show { display: flex; }
+    .spinner {
+      width: 18px; height: 18px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Result Card ──────────────────────────────────────────── */
+    .result-card {
+      display: none; margin-top: 20px;
+      border-radius: var(--radius); overflow: hidden;
+      border: 1px solid var(--border);
+      animation: fadeUp 0.4s ease;
+    }
+    .result-card.show { display: block; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .result-header {
+      padding: 14px 20px;
+      background: linear-gradient(135deg, #6c63ff33, #48cfad22);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .cluster-badge {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 800; flex-shrink: 0;
+    }
+    .result-header h3 { font-size: 14px; font-weight: 700; color: var(--text); }
+    .result-header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .result-body { padding: 16px 20px; background: rgba(0,0,0,0.2); }
+    .result-body p { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+    /* ── Cluster Legend ───────────────────────────────────────── */
+    .legend { margin-top: 24px; }
+    .legend-item {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 12px; border-radius: 10px;
+      transition: background 0.2s; cursor: default;
+    }
+    .legend-item:hover { background: rgba(255,255,255,0.04); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; }
+    .legend-text { font-size: 12px; }
+    .legend-text strong { display: block; font-size: 12px; font-weight: 600; color: var(--text); }
+    .legend-text span   { color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+    /* ── Chart Section ────────────────────────────────────────── */
+    .chart-card { min-height: 540px; }
+    #scatter-plot { width: 100%; height: 500px; }
+
+    /* ── Stats row ────────────────────────────────────────────── */
+    .stats { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-bottom: 24px; }
+    .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; text-align: center; }
+    .stat-value { font-size: 22px; font-weight: 800; background: linear-gradient(135deg,#a78bfa,#48cfad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Error ───────────────────────────────────────────────── */
+    .error-msg {
+      display: none; margin-top: 14px; padding: 12px 16px; border-radius: 10px;
+      background: rgba(252,92,125,0.12); border: 1px solid rgba(252,92,125,0.3);
+      color: var(--danger); font-size: 13px;
+    }
+    .error-msg.show { display: block; }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="badge">Machine Learning · K-Means</div>
+    <h1>Customer Segmentation<br>Dashboard</h1>
+    <p>Enter a customer's annual income and spending score to discover their segment using a K-Means model trained from scratch.</p>
+  </header>
+
+  <!-- ── Stats ── -->
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-value">200</div>
+      <div class="stat-label">Training Customers</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">5</div>
+      <div class="stat-label">Segments</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">~0.55</div>
+      <div class="stat-label">Silhouette Score</div>
+    </div>
+  </div>
+
+  <!-- ── Main Grid ── -->
+  <div class="grid">
+
+    <!-- LEFT: Input + Result -->
+    <div>
+      <div class="card">
+        <div class="card-title">Predict Customer Segment</div>
+
+        <!-- Income Slider -->
+        <div class="field">
+          <label>Annual Income <span id="income-val">70 k$</span></label>
+          <input type="range" id="income-slider" min="15" max="150" value="70" step="1"/>
+          <div class="range-ticks"><span>$15k</span><span>$80k</span><span>$150k</span></div>
+        </div>
+
+        <!-- Spending Slider -->
+        <div class="field">
+          <label>Spending Score <span id="spending-val">50 / 100</span></label>
+          <input type="range" id="spending-slider" min="1" max="100" value="50" step="1"/>
+          <div class="range-ticks"><span>1</span><span>50</span><span>100</span></div>
+        </div>
+
+        <button class="btn-predict" id="predict-btn" onclick="predictCluster()">
+          ⚡ Predict My Segment
+        </button>
+
+        <div class="loader" id="loader">
+          <div class="spinner"></div> <span>Analysing...</span>
+        </div>
+
+        <div class="error-msg" id="error-msg">
+          ⚠️ Could not connect to API. Make sure the backend is running:<br>
+          <code style="font-size:12px">uvicorn main:app --reload</code>
+        </div>
+
+        <!-- Result -->
+        <div class="result-card" id="result-card">
+          <div class="result-header">
+            <div class="cluster-badge" id="result-badge">?</div>
+            <div>
+              <h3 id="result-label">—</h3>
+              <p id="result-cluster">Cluster —</p>
+            </div>
+          </div>
+          <div class="result-body">
+            <p id="result-description">—</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cluster Legend -->
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">Cluster Personas</div>
+        <div class="legend" id="legend">
+          <div style="color:var(--muted);font-size:13px">Loading cluster data…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Chart -->
+    <div class="card chart-card">
+      <div class="card-title">Customer Segment Map</div>
+      <div id="scatter-plot"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   Config
+═══════════════════════════════════════════ */
+const API = 'http://127.0.0.1:8000';
+
+const PALETTE = [
+  '#6c63ff', '#48cfad', '#fc5c7d', '#ffd93d', '#4ecdc4'
+];
+const EMOJIS = ['💎', '📊', '⚠️', '⭐', '💤', '🔷'];
+
+/* ═══════════════════════════════════════════
+   Slider live update
+═══════════════════════════════════════════ */
+const incomeSlider  = document.getElementById('income-slider');
+const spendingSlider = document.getElementById('spending-slider');
+
+incomeSlider.addEventListener('input', () => {
+  document.getElementById('income-val').textContent = `${incomeSlider.value} k$`;
+});
+spendingSlider.addEventListener('input', () => {
+  document.getElementById('spending-val').textContent = `${spendingSlider.value} / 100`;
+});
+
+/* ═══════════════════════════════════════════
+   State
+═══════════════════════════════════════════ */
+let trainingData  = [];
+let clusterMapData = {};
+
+/* ═══════════════════════════════════════════
+   Load training data & build chart
+═══════════════════════════════════════════ */
+async function loadData() {
+  try {
+    const res = await fetch(`${API}/data`);
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    trainingData   = json.points;
+    clusterMapData = json.cluster_map;
+    buildChart();
+    buildLegend();
+  } catch {
+    document.getElementById('scatter-plot').innerHTML =
+      `<div style="color:var(--muted);padding:60px;text-align:center;font-size:13px">
+        ⚠️ Could not load chart data.<br>Start the backend: <code>uvicorn main:app --reload</code>
+      </div>`;
+    document.getElementById('legend').innerHTML =
+      `<div style="color:var(--muted);font-size:13px">Backend offline.</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Build Plotly scatter chart
+═══════════════════════════════════════════ */
+function buildChart(userPoint = null) {
+  const K = 5;
+  const traces = [];
+
+  // Group training data by cluster
+  for (let c = 0; c < K; c++) {
+    const pts = trainingData.filter(p => p.cluster === c);
+    const label = clusterMapData[c] ? clusterMapData[c].label : `Cluster ${c}`;
+    traces.push({
+      x: pts.map(p => p.income),
+      y: pts.map(p => p.spending),
+      mode: 'markers',
+      type: 'scatter',
+      name: `C${c}: ${label}`,
+      marker: {
+        color: PALETTE[c % PALETTE.length],
+        size: 9,
+        opacity: 0.75,
+        line: { color: 'rgba(255,255,255,0.3)', width: 1 }
+      },
+      hovertemplate: `<b>${label}</b><br>Income: $%{x}k<br>Spending: %{y}<extra>Cluster ${c}</extra>`
+    });
+  }
+
+  // User point
+  if (userPoint) {
+    traces.push({
+      x: [userPoint.income],
+      y: [userPoint.spending],
+      mode: 'markers',
+      type: 'scatter',
+      name: '📍 You',
+      marker: {
+        symbol: 'star',
+        color: '#ffffff',
+        size: 20,
+        line: { color: PALETTE[userPoint.cluster % PALETTE.length], width: 3 }
+      },
+      hovertemplate: `<b>Your Point</b><br>Income: $${userPoint.income}k<br>Spending: ${userPoint.spending}<extra></extra>`
+    });
+  }
+
+  const layout = {
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor:  'rgba(0,0,0,0)',
+    font: { family: 'Inter, sans-serif', color: '#94a3b8', size: 11 },
+    xaxis: {
+      title: 'Annual Income (k$)',
+      gridcolor: 'rgba(255,255,255,0.05)',
+      zerolinecolor: 'rgba(255,255,255,0.1)',
+      color: '#94a3b8'
+    },
+    yaxis: {
+      title: 'Spending Score (1–100)',
+      gridcolor: 'rgba(255,255,255,0.05)',
+      zerolinecolor: 'rgba(255,255,255,0.1)',
+      color: '#94a3b8'
+    },
+    legend: {
+      bgcolor: 'rgba(0,0,0,0)',
+      bordercolor: 'rgba(255,255,255,0.1)',
+      borderwidth: 1,
+      font: { size: 11 }
+    },
+    margin: { t: 20, r: 20, b: 60, l: 60 },
+    hovermode: 'closest',
+    transition: { duration: 400 }
+  };
+
+  const config = { responsive: true, displayModeBar: false };
+  Plotly.newPlot('scatter-plot', traces, layout, config);
+}
+
+/* ═══════════════════════════════════════════
+   Build Cluster Legend
+═══════════════════════════════════════════ */
+function buildLegend() {
+  const legend = document.getElementById('legend');
+  legend.innerHTML = '';
+  Object.entries(clusterMapData).forEach(([cid, info]) => {
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = `
+      <div class="legend-dot" style="background:${PALETTE[cid % PALETTE.length]}"></div>
+      <div class="legend-text">
+        <strong>Cluster ${cid} — ${info.label}</strong>
+        <span>${info.description.replace(/^[^\s]+\s/, '')}</span>
+      </div>`;
+    legend.appendChild(div);
+  });
+}
+
+/* ═══════════════════════════════════════════
+   Predict
+═══════════════════════════════════════════ */
+async function predictCluster() {
+  const income   = parseFloat(incomeSlider.value);
+  const spending = parseFloat(spendingSlider.value);
+
+  const btn = document.getElementById('predict-btn');
+  const loader = document.getElementById('loader');
+  const errorEl = document.getElementById('error-msg');
+  const resultCard = document.getElementById('result-card');
+
+  btn.disabled = true;
+  loader.classList.add('show');
+  errorEl.classList.remove('show');
+  resultCard.classList.remove('show');
+
+  try {
+    const res = await fetch(`${API}/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ income, spending_score: spending })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Show result
+    const color = PALETTE[data.cluster % PALETTE.length];
+    const badge = document.getElementById('result-badge');
+    badge.textContent = data.cluster;
+    badge.style.background = color + '33';
+    badge.style.color = color;
+    badge.style.border = `2px solid ${color}55`;
+
+    document.getElementById('result-label').textContent   = data.label;
+    document.getElementById('result-cluster').textContent = `Cluster ${data.cluster}`;
+    document.getElementById('result-description').textContent = data.description;
+    resultCard.classList.add('show');
+
+    // Update chart with user point
+    buildChart({ income, spending, cluster: data.cluster });
+
+  } catch (e) {
+    errorEl.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    loader.classList.remove('show');
+  }
+}
+
+/* ═══════════════════════════════════════════
+   Init
+═══════════════════════════════════════════ */
+loadData();
+</script>
+</body>
+</html>
