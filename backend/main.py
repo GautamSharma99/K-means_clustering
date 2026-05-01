@@ -94,8 +94,8 @@ print(f"[OK] Loaded cluster_labels.pkl — {K} clusters, {len(y_train)} training
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 class CustomerInput(BaseModel):
-    income:         float = Field(..., ge=0,   le=500,  example=70,  description="Annual Income in k$")
-    spending_score: float = Field(..., ge=1,   le=100,  example=80,  description="Spending Score 1–100")
+    income:         float = Field(..., ge=0,  le=500, description="Annual Income in k$",    json_schema_extra={"example": 70})
+    spending_score: float = Field(..., ge=1,  le=100, description="Spending Score 1–100",   json_schema_extra={"example": 80})
 
 class PredictResponse(BaseModel):
     cluster:     int
@@ -136,3 +136,9 @@ def get_training_data():
         for cid, v in cluster_map.items()
     }
     return {"points": points, "cluster_map": personas}
+
+
+# -- Entrypoint ---------------------------------------------------------------
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run('main:app', host='0.0.0.0', port=8000, reload=True)
